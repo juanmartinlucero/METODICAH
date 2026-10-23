@@ -1,0 +1,469 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model — METODICAH Enterprise Event Production SaaS
+// ===============================================================
+//
+// Collection: /users/{userId}
+// Document ID: Firebase Auth UID or team member ID (usr_*)
+// Fields:
+//   - id: string (required, max 128 chars, immutable on update)
+//   - name: string (required, 1..150 chars)
+//   - email: string (required, 3..254 chars)
+//   - globalRole: 'admin' | 'team_member' | 'guest' (required)
+//   - accountId: string (optional, max 128 chars)
+//   - companyName: string (optional, max 150 chars)
+//   - avatarUrl: string (optional, max 2048 chars)
+//   - phone: string (optional, max 60 chars)
+//   - specialty: string (optional, max 150 chars)
+//   - bio: string (optional, max 2000 chars)
+//   - location: string (optional, max 150 chars)
+//   - status: 'active' | 'inactive' (optional)
+//   - createdAt: string (optional, max 64 chars)
+//
+// Collection: /events/{eventId}
+// Document ID: Event ID (evt_*)
+// Fields:
+//   - id, code, title, date, venue, location, clientId, clientName,
+//     timeRange ({ startTime, endTime }), stageId, createdAt, updatedAt (required)
+//   - attendeesCount, scoutingDate, deployDate, scope, crewIds, summary,
+//     thirdPartiesInvolved, clientPreferences, concept, notes (optional)
+//
+// Collection: /timings/{eventId}
+// Document ID: Event ID (evt_*)
+// Fields:
+//   - items: list of TimingItem (required, max 500 items)
+//
+// Collection: /audit_logs/{logId}
+// Document ID: AuditLog ID (log_*)
+// Fields:
+//   - id, userId, userName, action, details, timestamp (required)
+//   - eventId (optional)
+//
+// Collection: /process_nodes/{eventId}
+// Document ID: Event ID (evt_*)
+// Fields:
+//   - items: list of ProcessNode (required, max 500 items)
+//
+// Collection: /clients/{clientId}
+// Document ID: Client ID (cli_*)
+// Fields:
+//   - id, name, email, phone, createdAt (required)
+//   - clientType, company, fantasyName, contactRole, industry, website,
+//     billingContactName, billingContactEmail, paymentTerms, supplierRequirements,
+//     documentNumber, birthDate, frequentEventType, preferences, taxId,
+//     taxCondition, address, city, state, zipCode, notes, activeEventsCount,
+//     updatedAt (optional)
+//
+// Collection: /suppliers/{supplierId}
+// Document ID: Supplier ID (sup_*)
+// Fields:
+//   - id, name, company, category, email, phone, createdAt (required)
+//   - taxId, taxCondition, address, city, state, zipCode, contactName,
+//     contactRole, emergencyPhone, website, equipmentHighlights, billingEmail,
+//     paymentTerms, notes, activeEventsCount, updatedAt (optional)
+//
+// Collection: /crew/{memberId}
+// Document ID: Crew Member ID (crew_*)
+// Fields:
+//   - id, userId, userName, sector, roleInEvent, userEmail (required)
+//   - documentNumber, taxId, birthDate, avatarUrl, type, seniority, phone,
+//     emergencyContactName, emergencyContactPhone, city, artInsurance,
+//     clothingSize, dietaryRestrictions, notes, activeEventsCount,
+//     hasSystemAccess, globalRole, createdAt (optional)
+//
+// Collection: /workflows/{workflowId}
+// Document ID: Workflow ID (wf_*)
+// Fields:
+//   - id, name, nodes, createdAt, updatedAt (required)
+//   - accountId, description, category, isDefault (optional)
+//
+// Collection: /settings/{settingId}
+// Document ID: 'companyLogo' | 'eventStages' | 'configuredScopes' |
+//              'supplierCategories' | 'crewSectors' | 'userProfile' |
+//              'dateFormat' | 'rolePermissions'
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function userDocPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        exists(userDocPath()) &&
+        get(userDocPath()).data.globalRole == 'admin';
+    }
+
+    function isAdminOrBootstrapping() {
+      return isAuthenticated() && (
+        !exists(userDocPath()) ||
+        !('globalRole' in get(userDocPath()).data) ||
+        get(userDocPath()).data.globalRole == 'admin'
+      );
+    }
+
+    function isOperationalWriter() {
+      return isAuthenticated() && (
+        !exists(userDocPath()) ||
+        !('globalRole' in get(userDocPath()).data) ||
+        get(userDocPath()).data.globalRole in ['admin', 'team_member']
+      );
+    }
+
+    function isValidOptionalString(data, field, maxLen) {
+      return !(field in data) ||
+        data[field] == null ||
+        (data[field] is string && data[field].size() <= maxLen);
+    }
+
+    function isValidOptionalList(data, field, maxSize) {
+      return !(field in data) ||
+        data[field] == null ||
+        (data[field] is list && data[field].size() <= maxSize);
+    }
+
+    function isValidOptionalNonNegativeNumber(data, field) {
+      return !(field in data) ||
+        data[field] == null ||
+        (data[field] is number && data[field] >= 0 && data[field] <= 100000000);
+    }
+
+    function isIdImmutable() {
+      return !('id' in resource.data) || request.resource.data.id == resource.data.id;
+    }
+
+    // ===============================================================
+    // Domain Validators (Called on BOTH create and update)
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['id', 'name', 'email', 'globalRole']) &&
+        data.keys().hasOnly([
+          'id', 'name', 'email', 'globalRole', 'accountId', 'companyName',
+          'avatarUrl', 'phone', 'specialty', 'bio', 'location', 'status', 'createdAt'
+        ]) &&
+        data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
+        data.name is string && data.name.size() > 0 && data.name.size() <= 150 &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 254 &&
+        data.globalRole in ['admin', 'team_member', 'guest'] &&
+        isValidOptionalString(data, 'accountId', 128) &&
+        isValidOptionalString(data, 'companyName', 150) &&
+        isValidOptionalString(data, 'avatarUrl', 2048) &&
+        isValidOptionalString(data, 'phone', 60) &&
+        isValidOptionalString(data, 'specialty', 150) &&
+        isValidOptionalString(data, 'bio', 2000) &&
+        isValidOptionalString(data, 'location', 150) &&
+        (!('status' in data) || data.status in ['active', 'inactive']) &&
+        isValidOptionalString(data, 'createdAt', 64);
+    }
+
+    function isValidEvent(data) {
+      return data.keys().hasAll([
+          'id', 'code', 'title', 'date', 'venue', 'location',
+          'clientId', 'clientName', 'timeRange', 'stageId', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'code', 'title', 'date', 'venue', 'location', 'clientId', 'clientName',
+          'timeRange', 'attendeesCount', 'scoutingDate', 'deployDate', 'scope',
+          'crewIds', 'summary', 'thirdPartiesInvolved', 'clientPreferences',
+          'concept', 'stageId', 'notes', 'createdAt', 'updatedAt'
+        ]) &&
+        data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
+        data.code is string && data.code.size() > 0 && data.code.size() <= 64 &&
+        data.title is string && data.title.size() > 0 && data.title.size() <= 250 &&
+        data.date is string && data.date.size() > 0 && data.date.size() <= 64 &&
+        data.venue is string && data.venue.size() <= 250 &&
+        data.location is string && data.location.size() <= 250 &&
+        data.clientId is string && data.clientId.size() <= 128 &&
+        data.clientName is string && data.clientName.size() <= 250 &&
+        data.timeRange is map &&
+        data.timeRange.keys().hasOnly(['startTime', 'endTime']) &&
+        data.timeRange.startTime is string && data.timeRange.startTime.size() <= 20 &&
+        data.timeRange.endTime is string && data.timeRange.endTime.size() <= 20 &&
+        data.stageId is string && data.stageId.size() > 0 && data.stageId.size() <= 100 &&
+        data.createdAt is string && data.createdAt.size() <= 64 &&
+        data.updatedAt is string && data.updatedAt.size() <= 64 &&
+        isValidOptionalNonNegativeNumber(data, 'attendeesCount') &&
+        isValidOptionalString(data, 'scoutingDate', 64) &&
+        isValidOptionalString(data, 'deployDate', 64) &&
+        isValidOptionalList(data, 'scope', 100) &&
+        isValidOptionalList(data, 'crewIds', 500) &&
+        isValidOptionalString(data, 'summary', 5000) &&
+        isValidOptionalList(data, 'thirdPartiesInvolved', 200) &&
+        isValidOptionalList(data, 'clientPreferences', 200) &&
+        isValidOptionalString(data, 'concept', 5000) &&
+        isValidOptionalString(data, 'notes', 10000);
+    }
+
+    function isValidItemsContainer(data) {
+      return data.keys().hasAll(['items']) &&
+        data.keys().hasOnly(['items']) &&
+        data.items is list &&
+        data.items.size() <= 500;
+    }
+
+    function isValidAuditLog(data) {
+      return data.keys().hasAll(['id', 'userId', 'userName', 'action', 'details', 'timestamp']) &&
+        data.keys().hasOnly(['id', 'eventId', 'userId', 'userName', 'action', 'details', 'timestamp']) &&
+        data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
+        isValidOptionalString(data, 'eventId', 128) &&
+        data.userId is string && data.userId.size() <= 128 &&
+        data.userName is string && data.userName.size() <= 150 &&
+        data.action is string && data.action.size() <= 250 &&
+        data.details is string && data.details.size() <= 5000 &&
+        data.timestamp is string && data.timestamp.size() <= 64;
+    }
+
+    function isValidClient(data) {
+      return data.keys().hasAll(['id', 'name', 'email', 'phone', 'createdAt']) &&
+        data.keys().hasOnly([
+          'id', 'clientType', 'name', 'company', 'fantasyName', 'contactRole',
+          'industry', 'website', 'billingContactName', 'billingContactEmail',
+          'paymentTerms', 'supplierRequirements', 'documentNumber', 'birthDate',
+          'frequentEventType', 'preferences', 'taxId', 'taxCondition', 'address',
+          'city', 'state', 'zipCode', 'email', 'phone', 'notes',
+          'activeEventsCount', 'createdAt', 'updatedAt'
+        ]) &&
+        data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
+        (!('clientType' in data) || data.clientType in ['empresa', 'persona']) &&
+        data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
+        data.email is string && data.email.size() <= 254 &&
+        data.phone is string && data.phone.size() <= 60 &&
+        data.createdAt is string && data.createdAt.size() <= 64 &&
+        isValidOptionalString(data, 'company', 200) &&
+        isValidOptionalString(data, 'fantasyName', 200) &&
+        isValidOptionalString(data, 'contactRole', 150) &&
+        isValidOptionalString(data, 'industry', 150) &&
+        isValidOptionalString(data, 'website', 500) &&
+        isValidOptionalString(data, 'billingContactName', 200) &&
+        isValidOptionalString(data, 'billingContactEmail', 254) &&
+        isValidOptionalString(data, 'paymentTerms', 500) &&
+        isValidOptionalString(data, 'supplierRequirements', 2000) &&
+        isValidOptionalString(data, 'documentNumber', 60) &&
+        isValidOptionalString(data, 'birthDate', 64) &&
+        isValidOptionalString(data, 'frequentEventType', 200) &&
+        isValidOptionalString(data, 'preferences', 2000) &&
+        isValidOptionalString(data, 'taxId', 60) &&
+        isValidOptionalString(data, 'taxCondition', 120) &&
+        isValidOptionalString(data, 'address', 300) &&
+        isValidOptionalString(data, 'city', 150) &&
+        isValidOptionalString(data, 'state', 150) &&
+        isValidOptionalString(data, 'zipCode', 40) &&
+        isValidOptionalString(data, 'notes', 5000) &&
+        isValidOptionalNonNegativeNumber(data, 'activeEventsCount') &&
+        isValidOptionalString(data, 'updatedAt', 64);
+    }
+
+    function isValidSupplier(data) {
+      return data.keys().hasAll(['id', 'name', 'company', 'category', 'email', 'phone', 'createdAt']) &&
+        data.keys().hasOnly([
+          'id', 'name', 'company', 'category', 'taxId', 'taxCondition',
+          'address', 'city', 'state', 'zipCode', 'contactName', 'contactRole',
+          'email', 'phone', 'emergencyPhone', 'website', 'equipmentHighlights',
+          'billingEmail', 'paymentTerms', 'notes', 'activeEventsCount',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
+        data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
+        data.company is string && data.company.size() <= 200 &&
+        data.category is string && data.category.size() > 0 && data.category.size() <= 100 &&
+        data.email is string && data.email.size() <= 254 &&
+        data.phone is string && data.phone.size() <= 60 &&
+        data.createdAt is string && data.createdAt.size() <= 64 &&
+        isValidOptionalString(data, 'taxId', 60) &&
+        isValidOptionalString(data, 'taxCondition', 120) &&
+        isValidOptionalString(data, 'address', 300) &&
+        isValidOptionalString(data, 'city', 150) &&
+        isValidOptionalString(data, 'state', 150) &&
+        isValidOptionalString(data, 'zipCode', 40) &&
+        isValidOptionalString(data, 'contactName', 200) &&
+        isValidOptionalString(data, 'contactRole', 150) &&
+        isValidOptionalString(data, 'emergencyPhone', 60) &&
+        isValidOptionalString(data, 'website', 500) &&
+        isValidOptionalString(data, 'equipmentHighlights', 2000) &&
+        isValidOptionalString(data, 'billingEmail', 254) &&
+        isValidOptionalString(data, 'paymentTerms', 500) &&
+        isValidOptionalString(data, 'notes', 5000) &&
+        isValidOptionalNonNegativeNumber(data, 'activeEventsCount') &&
+        isValidOptionalString(data, 'updatedAt', 64);
+    }
+
+    function isValidCrewMember(data) {
+      return data.keys().hasAll(['id', 'userId', 'userName', 'sector', 'roleInEvent', 'userEmail']) &&
+        data.keys().hasOnly([
+          'id', 'userId', 'userName', 'documentNumber', 'taxId', 'birthDate',
+          'avatarUrl', 'type', 'sector', 'roleInEvent', 'seniority', 'userEmail',
+          'phone', 'emergencyContactName', 'emergencyContactPhone', 'city',
+          'artInsurance', 'clothingSize', 'dietaryRestrictions', 'notes',
+          'activeEventsCount', 'hasSystemAccess', 'globalRole', 'createdAt'
+        ]) &&
+        data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
+        data.userId is string && data.userId.size() > 0 && data.userId.size() <= 128 &&
+        data.userName is string && data.userName.size() > 0 && data.userName.size() <= 200 &&
+        data.sector is string && data.sector.size() > 0 && data.sector.size() <= 150 &&
+        data.roleInEvent is string && data.roleInEvent.size() > 0 && data.roleInEvent.size() <= 150 &&
+        data.userEmail is string && data.userEmail.size() <= 254 &&
+        (!('type' in data) || data.type in ['staff_interno', 'freelancer']) &&
+        (!('seniority' in data) || data.seniority in ['lead', 'senior', 'semi_senior', 'junior']) &&
+        (!('globalRole' in data) || data.globalRole in ['admin', 'team_member', 'guest']) &&
+        (!('hasSystemAccess' in data) || data.hasSystemAccess is bool) &&
+        isValidOptionalString(data, 'documentNumber', 60) &&
+        isValidOptionalString(data, 'taxId', 60) &&
+        isValidOptionalString(data, 'birthDate', 64) &&
+        isValidOptionalString(data, 'avatarUrl', 2048) &&
+        isValidOptionalString(data, 'phone', 60) &&
+        isValidOptionalString(data, 'emergencyContactName', 200) &&
+        isValidOptionalString(data, 'emergencyContactPhone', 60) &&
+        isValidOptionalString(data, 'city', 150) &&
+        isValidOptionalString(data, 'artInsurance', 200) &&
+        isValidOptionalString(data, 'clothingSize', 20) &&
+        isValidOptionalString(data, 'dietaryRestrictions', 500) &&
+        isValidOptionalString(data, 'notes', 5000) &&
+        isValidOptionalNonNegativeNumber(data, 'activeEventsCount') &&
+        isValidOptionalString(data, 'createdAt', 64);
+    }
+
+    function isValidWorkflow(data) {
+      return data.keys().hasAll(['id', 'name', 'nodes', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly([
+          'id', 'accountId', 'name', 'description', 'category',
+          'isDefault', 'nodes', 'createdAt', 'updatedAt'
+        ]) &&
+        data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
+        data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
+        isValidOptionalString(data, 'accountId', 128) &&
+        isValidOptionalString(data, 'description', 2000) &&
+        isValidOptionalString(data, 'category', 150) &&
+        (!('isDefault' in data) || data.isDefault is bool) &&
+        data.nodes is list && data.nodes.size() <= 500 &&
+        data.createdAt is string && data.createdAt.size() <= 64 &&
+        data.updatedAt is string && data.updatedAt.size() <= 64;
+    }
+
+    function isValidSetting(settingId, data) {
+      return (settingId == 'companyLogo' && data.keys().hasOnly(['logo']) && ('logo' in data) && (data.logo == null || (data.logo is string && data.logo.size() <= 500000))) ||
+        (settingId == 'eventStages' && data.keys().hasOnly(['stages']) && data.stages is list && data.stages.size() <= 100) ||
+        (settingId == 'configuredScopes' && data.keys().hasOnly(['scopes']) && data.scopes is list && data.scopes.size() <= 200) ||
+        (settingId == 'supplierCategories' && data.keys().hasOnly(['categories']) && data.categories is list && data.categories.size() <= 100) ||
+        (settingId == 'crewSectors' && data.keys().hasOnly(['sectors']) && data.sectors is list && data.sectors.size() <= 100) ||
+        (settingId == 'userProfile' && isValidUser(data)) ||
+        (settingId == 'dateFormat' && data.keys().hasOnly(['format']) && data.format is string && data.format.size() <= 64) ||
+        (settingId == 'rolePermissions' && data.keys().hasOnly(['permissions']) && data.permissions is list && data.permissions.size() <= 100);
+    }
+
+    // ===============================================================
+    // 1. Users Collection (/users/{userId})
+    // ===============================================================
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+
+      allow create: if isAuthenticated() &&
+        isValidUser(request.resource.data) &&
+        (isOwner(userId) || isAdmin());
+
+      allow update: if isAuthenticated() &&
+        isValidUser(request.resource.data) &&
+        isIdImmutable() &&
+        (
+          (isOwner(userId) && (
+            !('globalRole' in request.resource.data) ||
+            request.resource.data.globalRole != 'admin' ||
+            resource.data.globalRole == 'admin'
+          )) ||
+          isAdmin()
+        );
+
+      allow delete: if isAdmin() && resource.data.globalRole != 'admin';
+    }
+
+    // ===============================================================
+    // 2. Operational Production Collections
+    // ===============================================================
+    match /events/{eventId} {
+      allow read: if isAuthenticated();
+      allow create: if isOperationalWriter() && isValidEvent(request.resource.data);
+      allow update: if isOperationalWriter() && isValidEvent(request.resource.data) && isIdImmutable();
+      allow delete: if isOperationalWriter();
+    }
+
+    match /timings/{eventId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isOperationalWriter() && isValidItemsContainer(request.resource.data);
+      allow delete: if isOperationalWriter();
+    }
+
+    match /audit_logs/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isOperationalWriter() && isValidAuditLog(request.resource.data);
+      allow update: if isOperationalWriter() && isValidAuditLog(request.resource.data) && isIdImmutable();
+      allow delete: if isOperationalWriter();
+    }
+
+    match /process_nodes/{eventId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isOperationalWriter() && isValidItemsContainer(request.resource.data);
+      allow delete: if isOperationalWriter();
+    }
+
+    match /clients/{clientId} {
+      allow read: if isAuthenticated();
+      allow create: if isOperationalWriter() && isValidClient(request.resource.data);
+      allow update: if isOperationalWriter() && isValidClient(request.resource.data) && isIdImmutable();
+      allow delete: if isOperationalWriter();
+    }
+
+    match /suppliers/{supplierId} {
+      allow read: if isAuthenticated();
+      allow create: if isOperationalWriter() && isValidSupplier(request.resource.data);
+      allow update: if isOperationalWriter() && isValidSupplier(request.resource.data) && isIdImmutable();
+      allow delete: if isOperationalWriter();
+    }
+
+    match /crew/{memberId} {
+      allow read: if isAuthenticated();
+      allow create: if isOperationalWriter() && isValidCrewMember(request.resource.data);
+      allow update: if isOperationalWriter() && isValidCrewMember(request.resource.data) && isIdImmutable();
+      allow delete: if isOperationalWriter();
+    }
+
+    match /workflows/{workflowId} {
+      allow read: if isAuthenticated();
+      allow create: if isOperationalWriter() && isValidWorkflow(request.resource.data);
+      allow update: if isOperationalWriter() && isValidWorkflow(request.resource.data) && isIdImmutable();
+      allow delete: if isOperationalWriter();
+    }
+
+    // ===============================================================
+    // 3. Global & User Settings (/settings/{settingId})
+    // ===============================================================
+    match /settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() &&
+        isValidSetting(settingId, request.resource.data) &&
+        (settingId in ['userProfile', 'dateFormat'] || isAdminOrBootstrapping());
+      allow delete: if isAdminOrBootstrapping();
+    }
+
+    // ===============================================================
+    // 4. Explicit Default Deny
+    // ===============================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

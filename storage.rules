@@ -1,0 +1,31 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isValidAttachment() {
+      return request.resource.size < 15 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*|application/pdf|text/csv');
+    }
+
+    // Logos de productora y avatares de perfil
+    match /branding/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && isValidAttachment();
+    }
+
+    // Planos CAD/PDF, riders técnicos y adjuntos de eventos
+    match /events/{eventId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && isValidAttachment();
+    }
+
+    // Denegación explícita por defecto
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

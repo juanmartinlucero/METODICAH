@@ -1,0 +1,12 @@
+export { DashboardView, type DashboardViewProps } from './DashboardView';
+export { EventsView, type EventsViewProps } from './EventsView';
+export { EventDetailView, type EventDetailViewProps } from './EventDetailView';
+export { ClientsView, type ClientsViewProps } from './ClientsView';
+export { SuppliersView, type SuppliersViewProps } from './SuppliersView';
+export { CrewView, type CrewViewProps } from './CrewView';
+export { SettingsView, type SettingsViewProps } from './SettingsView';
+export { ProfileView, type ProfileViewProps } from './ProfileView';
+export { WorkflowView, type WorkflowViewProps } from './WorkflowView';
+export { NotFoundView, type NotFoundViewProps } from './NotFoundView';
+export { LoginView } from './LoginView';
+export { RegisterView } from './RegisterView';
