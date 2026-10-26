@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { EventItem, TimingItem, AuditLog, EventStageConfig, ProcessNode } from '../types/metodicah';
+import type { EventItem, TimingItem, AuditLog, EventStageConfig, ProcessNode, AccreditationItem } from '../types/metodicah';
 import { useSettingsStore } from './useSettingsStore';
 import { eventsRepository } from '../services/repositories';
 import { generateId } from '@/utils/idUtils';
@@ -12,6 +12,7 @@ interface EventsState {
   isNewEventModalOpen: boolean;
   preselectedClientId: string | undefined;
   timingsMap: Record<string, TimingItem[]>;
+  accreditationsMap: Record<string, AccreditationItem[]>;
   logs: AuditLog[];
   processNodesMap: Record<string, ProcessNode[]>;
   isLoading: boolean;
@@ -30,6 +31,11 @@ interface EventsState {
   deleteEvent: (eventId: string) => void;
   updateTimingStatus: (timingId: string, newStatus: TimingItem['status']) => void;
   addTimingItem: (newItem: Omit<TimingItem, 'id' | 'eventId'>) => void;
+  addAccreditation: (newItem: Omit<AccreditationItem, 'id' | 'createdAt' | 'updatedAt'>) => AccreditationItem;
+  updateAccreditation: (item: AccreditationItem) => void;
+  deleteAccreditation: (eventId: string, id: string) => void;
+  toggleCheckIn: (eventId: string, id: string, operatorName?: string) => void;
+  bulkAddAccreditations: (eventId: string, newItems: Omit<AccreditationItem, 'id' | 'createdAt' | 'updatedAt'>[]) => void;
   updateProcessNode: (eventId: string, nodeId: string, updates: Partial<ProcessNode>) => void;
 }
 
@@ -39,6 +45,7 @@ export const useEventsStore = create<EventsState>((set, get) => ({
   isNewEventModalOpen: false,
   preselectedClientId: undefined,
   timingsMap: {},
+  accreditationsMap: {},
   logs: [],
   processNodesMap: {},
   isLoading: false,
@@ -48,15 +55,17 @@ export const useEventsStore = create<EventsState>((set, get) => ({
   loadEvents: async () => {
     set({ isLoading: true, error: null });
     try {
-      const [events, timingsMap, logs, processNodesMap] = await Promise.all([
+      const [events, timingsMap, accreditationsMap, logs, processNodesMap] = await Promise.all([
         eventsRepository.getEvents(),
         eventsRepository.getTimings(),
+        eventsRepository.getAccreditations ? eventsRepository.getAccreditations() : Promise.resolve({}),
         eventsRepository.getLogs(),
         eventsRepository.getProcessNodes()
       ]);
       set({
         events,
         timingsMap,
+        accreditationsMap,
         logs,
         processNodesMap,
         isLoading: false
@@ -404,6 +413,174 @@ export const useEventsStore = create<EventsState>((set, get) => ({
         timingsMap: previousTimings,
         isSyncing: false, 
         error: formatFirebaseError(err, 'Error al agregar timing')
+      }));
+  },
+
+  addAccreditation: (newItem) => {
+    const { accreditationsMap } = get();
+    const now = new Date().toISOString();
+    const id = generateId('acc');
+    const created: AccreditationItem = {
+      ...newItem,
+      id,
+      qrCode: newItem.qrCode || `MET-${newItem.eventId.slice(-4).toUpperCase()}-${newItem.documentNumber.replace(/\D/g, '').slice(-8)}`,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    const currentList = accreditationsMap[newItem.eventId] || [];
+    const updatedMap = {
+      ...accreditationsMap,
+      [newItem.eventId]: [created, ...currentList]
+    };
+
+    const previousMap = accreditationsMap;
+    set({ accreditationsMap: updatedMap, isSyncing: true, error: null });
+
+    eventsRepository.saveAccreditations(updatedMap)
+      .then(() => set({ isSyncing: false }))
+      .catch((err) => set({
+        accreditationsMap: previousMap,
+        isSyncing: false,
+        error: formatFirebaseError(err, 'Error al guardar la acreditación')
+      }));
+
+    return created;
+  },
+
+  updateAccreditation: (updatedItem) => {
+    const { accreditationsMap } = get();
+    const eventId = updatedItem.eventId;
+    const currentList = accreditationsMap[eventId] || [];
+    const now = new Date().toISOString();
+    const updatedList = currentList.map(item =>
+      item.id === updatedItem.id ? { ...updatedItem, updatedAt: now } : item
+    );
+
+    const updatedMap = {
+      ...accreditationsMap,
+      [eventId]: updatedList
+    };
+
+    const previousMap = accreditationsMap;
+    set({ accreditationsMap: updatedMap, isSyncing: true, error: null });
+
+    eventsRepository.saveAccreditations(updatedMap)
+      .then(() => set({ isSyncing: false }))
+      .catch((err) => set({
+        accreditationsMap: previousMap,
+        isSyncing: false,
+        error: formatFirebaseError(err, 'Error al actualizar la acreditación')
+      }));
+  },
+
+  deleteAccreditation: (eventId, id) => {
+    const { accreditationsMap } = get();
+    const currentList = accreditationsMap[eventId] || [];
+    const updatedList = currentList.filter(item => item.id !== id);
+
+    const updatedMap = {
+      ...accreditationsMap,
+      [eventId]: updatedList
+    };
+
+    const previousMap = accreditationsMap;
+    set({ accreditationsMap: updatedMap, isSyncing: true, error: null });
+
+    eventsRepository.saveAccreditations(updatedMap)
+      .then(() => set({ isSyncing: false }))
+      .catch((err) => set({
+        accreditationsMap: previousMap,
+        isSyncing: false,
+        error: formatFirebaseError(err, 'Error al eliminar la acreditación')
+      }));
+  },
+
+  toggleCheckIn: (eventId, id, operatorName = 'Producción') => {
+    const { accreditationsMap, logs } = get();
+    const currentList = accreditationsMap[eventId] || [];
+    const item = currentList.find(i => i.id === id);
+    if (!item) return;
+
+    const isEntering = item.status !== 'en_sitio';
+    const now = new Date().toISOString();
+
+    const updatedItem: AccreditationItem = {
+      ...item,
+      status: isEntering ? 'en_sitio' : 'aprobada',
+      checkInAt: isEntering ? now : null,
+      checkInBy: isEntering ? operatorName : null,
+      updatedAt: now
+    };
+
+    const updatedList = currentList.map(i => i.id === id ? updatedItem : i);
+    const updatedMap = {
+      ...accreditationsMap,
+      [eventId]: updatedList
+    };
+
+    const newLog: AuditLog = {
+      id: generateId('log'),
+      eventId,
+      userId: 'usr_01',
+      userName: operatorName,
+      action: isEntering ? 'ACCREDITATION_CHECK_IN' : 'ACCREDITATION_CHECK_OUT',
+      details: `${isEntering ? 'Ingreso registrado (En Sitio)' : 'Salida registrada'} para ${item.firstName} ${item.lastName} [${item.accessLevel} - ${item.company}]`,
+      timestamp: new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+    };
+
+    const updatedLogs = [newLog, ...logs];
+    const previousMap = accreditationsMap;
+    const previousLogs = logs;
+
+    set({
+      accreditationsMap: updatedMap,
+      logs: updatedLogs,
+      isSyncing: true,
+      error: null
+    });
+
+    Promise.all([
+      eventsRepository.saveAccreditations(updatedMap),
+      eventsRepository.saveLogs(updatedLogs)
+    ])
+      .then(() => set({ isSyncing: false }))
+      .catch((err) => set({
+        accreditationsMap: previousMap,
+        logs: previousLogs,
+        isSyncing: false,
+        error: formatFirebaseError(err, 'Error al registrar check-in')
+      }));
+  },
+
+  bulkAddAccreditations: (eventId, newItems) => {
+    const { accreditationsMap } = get();
+    const currentList = accreditationsMap[eventId] || [];
+    const now = new Date().toISOString();
+
+    const createdItems: AccreditationItem[] = newItems.map(item => ({
+      ...item,
+      id: generateId('acc'),
+      eventId,
+      qrCode: item.qrCode || `MET-${eventId.slice(-4).toUpperCase()}-${item.documentNumber.replace(/\D/g, '').slice(-8)}`,
+      createdAt: now,
+      updatedAt: now
+    }));
+
+    const updatedMap = {
+      ...accreditationsMap,
+      [eventId]: [...createdItems, ...currentList]
+    };
+
+    const previousMap = accreditationsMap;
+    set({ accreditationsMap: updatedMap, isSyncing: true, error: null });
+
+    eventsRepository.saveAccreditations(updatedMap)
+      .then(() => set({ isSyncing: false }))
+      .catch((err) => set({
+        accreditationsMap: previousMap,
+        isSyncing: false,
+        error: formatFirebaseError(err, 'Error al importar acreditaciones')
       }));
   },
 

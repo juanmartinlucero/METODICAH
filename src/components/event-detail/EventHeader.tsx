@@ -9,12 +9,13 @@ import {
   MapPin, 
   Building2, 
   Layers,
-  ChevronDown
+  ChevronDown,
+  IdCard
 } from 'lucide-react';
 import { FormattedDate } from '../common/FormattedDate';
 
 
-export type EventSubTab = 'overview' | 'timing' | 'logs';
+export type EventSubTab = 'overview' | 'timing' | 'accreditations' | 'logs';
 
 interface EventHeaderProps {
   event: EventItem;
@@ -25,6 +26,7 @@ interface EventHeaderProps {
   onExportPDF: () => void;
   onUpdateEventStage?: (eventId: string, stageId: string) => void;
   timingsCount: number;
+  accreditationsCount: number;
   logsCount: number;
 }
 
@@ -37,6 +39,7 @@ export const EventHeader: React.FC<EventHeaderProps> = ({
   onExportPDF,
   onUpdateEventStage,
   timingsCount,
+  accreditationsCount,
   logsCount
 }) => {
   const currentStage = stages.find(s => s.id === event.stageId) || {
@@ -164,6 +167,15 @@ export const EventHeader: React.FC<EventHeaderProps> = ({
         >
           <Clock size={15} />
           <span>Timing Sectorizado ({timingsCount})</span>
+        </button>
+
+        <button 
+          onClick={() => setActiveSubTab('accreditations')}
+          className={activeSubTab === 'accreditations' ? 'btn-primary' : 'btn-ghost'}
+          style={{ fontSize: '0.82rem', padding: '7px 14px' }}
+        >
+          <IdCard size={15} />
+          <span>Acreditaciones ({accreditationsCount})</span>
         </button>
 
         <button 

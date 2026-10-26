@@ -93,16 +93,19 @@ describe('Firestore Repository Pattern Data Layer', () => {
       expect(Array.isArray(logs)).toBe(true);
       const nodes = await repo.getProcessNodes();
       expect(nodes).toBeDefined();
+      const accreditations = await repo.getAccreditations();
+      expect(accreditations).toBeDefined();
 
       await expect(repo.saveEvents(events)).resolves.not.toThrow();
       await expect(repo.saveTimings(timings)).resolves.not.toThrow();
+      await expect(repo.saveAccreditations(accreditations)).resolves.not.toThrow();
       await expect(repo.saveLogs(logs)).resolves.not.toThrow();
       await expect(repo.saveProcessNodes(nodes)).resolves.not.toThrow();
 
       mockBatchDelete.mockClear();
       await expect(repo.deleteEvent('evt_101')).resolves.not.toThrow();
-      // Elimina en cascada el documento en events, timings y process_nodes
-      expect(mockBatchDelete).toHaveBeenCalledTimes(3);
+      // Elimina en cascada el documento en events, timings, accreditations y process_nodes
+      expect(mockBatchDelete).toHaveBeenCalledTimes(4);
     });
 
     it('FirestoreSettingsRepository fulfills ISettingsRepository contract', async () => {

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router';
 import { EventHeader, type EventSubTab } from '@/components/event-detail/EventHeader';
 import { EventOverviewTab } from '@/components/event-detail/EventOverviewTab';
 import { EventTimingTab } from '@/components/event-detail/EventTimingTab';
+import { EventAccreditationsTab } from '@/components/event-detail/accreditations/EventAccreditationsTab';
 import { EventLogsTab } from '@/components/event-detail/EventLogsTab';
 import { NotFoundView } from '@/components/common/NotFoundView';
 import { useDateFormat } from '@/hooks/useDateFormat';
@@ -26,6 +27,7 @@ export const EventDetailView: React.FC<EventDetailViewProps> = () => {
   const onUpdateEventStage = useEventsStore(s => s.updateEventStage);
   const onUpdateEvent = useEventsStore(s => s.updateEvent);
   const timingsMap = useEventsStore(s => s.timingsMap);
+  const accreditationsMap = useEventsStore(s => s.accreditationsMap);
   const storeLogs = useEventsStore(s => s.logs);
 
   const stages = useSettingsStore(s => s.stages);
@@ -46,7 +48,7 @@ export const EventDetailView: React.FC<EventDetailViewProps> = () => {
   }, [event, selectedEvent, selectEvent]);
 
   const activeSubTab: EventSubTab = (
-    subTab === 'timing' || subTab === 'logs'
+    subTab === 'timing' || subTab === 'logs' || subTab === 'accreditations'
       ? subTab
       : 'overview'
   );
@@ -78,6 +80,7 @@ export const EventDetailView: React.FC<EventDetailViewProps> = () => {
 
   const crewMembers = storeCrew;
   const timings = timingsMap[event.id] || [];
+  const accreditations = accreditationsMap[event.id] || [];
   const logs = storeLogs.filter(l => l.eventId === event.id);
 
   // PDF Export for Timings (dynamically imported on demand)
@@ -122,6 +125,7 @@ export const EventDetailView: React.FC<EventDetailViewProps> = () => {
         onExportPDF={handleExportPDF}
         onUpdateEventStage={onUpdateEventStage}
         timingsCount={timings.length}
+        accreditationsCount={accreditations.length}
         logsCount={logs.length}
       />
 
@@ -141,6 +145,12 @@ export const EventDetailView: React.FC<EventDetailViewProps> = () => {
           timings={timings}
           onUpdateTimingStatus={onUpdateTimingStatus}
           onAddTimingItem={onAddTimingItem}
+        />
+      )}
+
+      {activeSubTab === 'accreditations' && (
+        <EventAccreditationsTab
+          event={event}
         />
       )}
 

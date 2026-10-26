@@ -245,6 +245,44 @@ export interface TimingItem {
   order: number;
 }
 
+export type AccreditationStatus = 'solicitada' | 'aprobada' | 'impresa' | 'en_sitio' | 'revocada';
+
+export type AccreditationAccessLevel = 'ALL ACCESS' | 'STAFF' | 'GUEST';
+
+export interface AccreditationItem {
+  id: string;
+  eventId: string;
+  firstName: string;
+  lastName: string;
+  documentNumber: string; // DNI / Pasaporte
+  role: string;          // ej. Iluminador, Sonidista, Rigger, Seguridad
+  company: string;       // Empresa o Proveedor
+  accessLevel: AccreditationAccessLevel;
+  status: AccreditationStatus;
+  qrCode: string;        // Hash único de verificación
+  checkInAt?: string | null;  // ISO string de ingreso al predio
+  checkOutAt?: string | null; // ISO string de salida
+  checkInBy?: string | null;  // Nombre o ID de quien registró el ingreso
+  insuranceVerified?: boolean; // ART / Seguro validado
+  emergencyPhone?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AccreditationStats {
+  total: number;
+  enSitioCount: number;
+  headcountPercentage: number;
+  aprobadasCount: number;
+  solicitadasCount: number;
+  allAccessCount: number;
+  staffCount: number;
+  guestCount: number;
+  artVerificadaCount: number;
+  artFaltanteCount: number;
+}
+
 export interface ProcessNode {
   id: string;
   eventId?: string;

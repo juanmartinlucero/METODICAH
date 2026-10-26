@@ -1,4 +1,4 @@
-import type { EventItem, TimingItem, AuditLog, ProcessNode } from '@/types/metodicah';
+import type { EventItem, TimingItem, AuditLog, ProcessNode, AccreditationItem } from '@/types/metodicah';
 
 export interface IEventsRepository {
   getEvents(): Promise<EventItem[]>;
@@ -9,6 +9,9 @@ export interface IEventsRepository {
 
   getTimings(): Promise<Record<string, TimingItem[]>>;
   saveTimings(timings: Record<string, TimingItem[]>): Promise<void>;
+
+  getAccreditations(): Promise<Record<string, AccreditationItem[]>>;
+  saveAccreditations(accreditations: Record<string, AccreditationItem[]>): Promise<void>;
 
   getLogs(): Promise<AuditLog[]>;
   saveLogs(logs: AuditLog[]): Promise<void>;

@@ -1,14 +1,16 @@
-import type { EventItem, TimingItem, AuditLog, ProcessNode } from '@/types/metodicah';
+import type { EventItem, TimingItem, AuditLog, ProcessNode, AccreditationItem } from '@/types/metodicah';
 import type { IEventsRepository } from '../contracts/IEventsRepository';
 import { db } from '@/services/firebase';
 import { collection, doc, getDocs, onSnapshot, setDoc } from 'firebase/firestore';
 import { syncCollectionWithBatch, commitBatchInChunks, type BatchOperation } from './firestoreBatchUtils';
 import { cleanFirestorePayload } from '@/utils/cleanFirestorePayload';
 import { formatFirebaseError } from '@/utils/firebaseErrors';
+import { MOCK_ACCREDITATIONS } from '@/services/mockData';
 
 export class FirestoreEventsRepository implements IEventsRepository {
   private inMemoryEvents: EventItem[] = [];
   private inMemoryTimings: Record<string, TimingItem[]> = {};
+  private inMemoryAccreditations: Record<string, AccreditationItem[]> = { ...MOCK_ACCREDITATIONS };
   private inMemoryLogs: AuditLog[] = [];
   private inMemoryProcessNodes: Record<string, ProcessNode[]> = {};
 
@@ -84,22 +86,26 @@ export class FirestoreEventsRepository implements IEventsRepository {
   async deleteEvent(id: string): Promise<void> {
     const previousEvents = this.inMemoryEvents;
     const previousTimings = { ...this.inMemoryTimings };
+    const previousAccreditations = { ...this.inMemoryAccreditations };
     const previousNodes = { ...this.inMemoryProcessNodes };
 
     this.inMemoryEvents = previousEvents.filter(e => e.id !== id);
     delete this.inMemoryTimings[id];
+    delete this.inMemoryAccreditations[id];
     delete this.inMemoryProcessNodes[id];
 
     try {
       const ops: BatchOperation[] = [
         { type: 'delete', ref: doc(collection(db, 'events'), id) },
         { type: 'delete', ref: doc(collection(db, 'timings'), id) },
+        { type: 'delete', ref: doc(collection(db, 'accreditations'), id) },
         { type: 'delete', ref: doc(collection(db, 'process_nodes'), id) }
       ];
       await commitBatchInChunks(db, ops);
     } catch (err) {
       this.inMemoryEvents = previousEvents;
       this.inMemoryTimings = previousTimings;
+      this.inMemoryAccreditations = previousAccreditations;
       this.inMemoryProcessNodes = previousNodes;
       throw new Error(formatFirebaseError(err, 'Error al eliminar el evento en cascada.'));
     }
@@ -157,6 +163,61 @@ export class FirestoreEventsRepository implements IEventsRepository {
     } catch (err) {
       this.inMemoryTimings = previousTimings;
       throw new Error(formatFirebaseError(err, 'Error al guardar el cronograma de timings.'));
+    }
+  }
+
+  // --- ACCREDITATIONS ---
+
+  async getAccreditations(): Promise<Record<string, AccreditationItem[]>> {
+    try {
+      const accrCol = collection(db, 'accreditations');
+      const snapshot = await getDocs(accrCol);
+      if (!snapshot.empty) {
+        const remoteMap: Record<string, AccreditationItem[]> = {};
+        snapshot.docs.forEach(d => {
+          const data = d.data();
+          if (data && Array.isArray(data.items)) {
+            remoteMap[d.id] = data.items;
+          }
+        });
+        this.inMemoryAccreditations = remoteMap;
+        return remoteMap;
+      }
+    } catch {
+      // Fallback en memoria si falla la conexión de red
+    }
+    return this.inMemoryAccreditations;
+  }
+
+  async saveAccreditations(accreditations: Record<string, AccreditationItem[]>): Promise<void> {
+    const previousAccreditations = this.inMemoryAccreditations;
+    const previousKeys = Object.keys(previousAccreditations);
+    const incomingKeys = new Set(Object.keys(accreditations));
+    const keysToDelete = previousKeys.filter(k => !incomingKeys.has(k));
+
+    this.inMemoryAccreditations = accreditations;
+
+    try {
+      const accrCol = collection(db, 'accreditations');
+      const ops: BatchOperation[] = [];
+
+      for (const key of keysToDelete) {
+        ops.push({ type: 'delete', ref: doc(accrCol, key) });
+      }
+
+      for (const [eventId, items] of Object.entries(accreditations)) {
+        ops.push({
+          type: 'set',
+          ref: doc(accrCol, eventId),
+          data: cleanFirestorePayload({ items }),
+          merge: true
+        });
+      }
+
+      await commitBatchInChunks(db, ops);
+    } catch (err) {
+      this.inMemoryAccreditations = previousAccreditations;
+      throw new Error(formatFirebaseError(err, 'Error al guardar las acreditaciones en Firestore.'));
     }
   }
 

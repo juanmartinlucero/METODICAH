@@ -4,6 +4,7 @@ import type {
   Supplier, 
   UserProfile, 
   TimingItem, 
+  AccreditationItem,
   ProcessNode, 
   AuditLog,
   EventStageConfig,
@@ -591,6 +592,100 @@ export const MOCK_TIMINGS: Record<string, TimingItem[]> = {
       responsible: 'Control General',
       status: 'pending',
       order: 6
+    }
+  ]
+};
+
+export const MOCK_ACCREDITATIONS: Record<string, AccreditationItem[]> = {
+  'evt_101': [
+    {
+      id: 'acc_01',
+      eventId: 'evt_101',
+      firstName: 'Marcos',
+      lastName: 'Villalba',
+      documentNumber: '34.892.114',
+      role: 'Director Técnico & Rigging',
+      company: 'Staging & Rigging Solutions',
+      accessLevel: 'ALL ACCESS',
+      status: 'en_sitio',
+      qrCode: 'MET-E101-34892114-X8A2',
+      checkInAt: '2026-08-10T06:45:00.000Z',
+      checkInBy: 'Juan Martín',
+      insuranceVerified: true,
+      emergencyPhone: '+54 9 11 4455-8899',
+      notes: 'Responsable de seguridad en alturas y descuelgue.',
+      createdAt: '2026-08-01T12:00:00.000Z',
+      updatedAt: '2026-08-10T06:45:00.000Z'
+    },
+    {
+      id: 'acc_02',
+      eventId: 'evt_101',
+      firstName: 'Federico',
+      lastName: 'Sánchez',
+      documentNumber: '37.104.992',
+      role: 'Ingeniero de Sonido FOH',
+      company: 'MaxiSound Pro',
+      accessLevel: 'STAFF',
+      status: 'en_sitio',
+      qrCode: 'MET-E101-37104992-K4M9',
+      checkInAt: '2026-08-10T08:15:00.000Z',
+      checkInBy: 'Juan Martín',
+      insuranceVerified: true,
+      emergencyPhone: '+54 9 11 3322-1100',
+      notes: 'Puesto en carpa técnica central.',
+      createdAt: '2026-08-01T12:00:00.000Z',
+      updatedAt: '2026-08-10T08:15:00.000Z'
+    },
+    {
+      id: 'acc_03',
+      eventId: 'evt_101',
+      firstName: 'Luciana',
+      lastName: 'Ríos',
+      documentNumber: '41.205.883',
+      role: 'Diseñadora de Iluminación',
+      company: 'Lumina Tech',
+      accessLevel: 'STAFF',
+      status: 'aprobada',
+      qrCode: 'MET-E101-41205883-L2P8',
+      insuranceVerified: true,
+      emergencyPhone: '+54 9 11 6789-0123',
+      notes: 'Llegada estimada a las 14:00 para parche.',
+      createdAt: '2026-08-02T10:00:00.000Z',
+      updatedAt: '2026-08-02T10:00:00.000Z'
+    },
+    {
+      id: 'acc_04',
+      eventId: 'evt_101',
+      firstName: 'Agustín',
+      lastName: 'Lombardi',
+      documentNumber: '39.847.120',
+      role: 'Fotógrafo Oficial Prensa',
+      company: 'Rolling Stone Arg',
+      accessLevel: 'GUEST',
+      status: 'aprobada',
+      qrCode: 'MET-E101-39847120-Q7Z3',
+      insuranceVerified: false,
+      emergencyPhone: '+54 9 11 9876-5432',
+      notes: 'Acceso habilitado al foso de prensa en los primeros 3 temas.',
+      createdAt: '2026-08-03T15:30:00.000Z',
+      updatedAt: '2026-08-03T15:30:00.000Z'
+    },
+    {
+      id: 'acc_05',
+      eventId: 'evt_101',
+      firstName: 'Clara',
+      lastName: 'Benítez',
+      documentNumber: '36.554.219',
+      role: 'Brand Manager Sponsor',
+      company: 'Red Bull Music',
+      accessLevel: 'GUEST',
+      status: 'solicitada',
+      qrCode: 'MET-E101-36554219-R1T5',
+      insuranceVerified: false,
+      emergencyPhone: '+54 9 11 5566-7788',
+      notes: 'Pendiente confirmación de nómina de acompañantes.',
+      createdAt: '2026-08-04T09:20:00.000Z',
+      updatedAt: '2026-08-04T09:20:00.000Z'
     }
   ]
 };
