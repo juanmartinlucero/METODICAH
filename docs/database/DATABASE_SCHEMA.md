@@ -9,6 +9,7 @@ erDiagram
   USERS ||--o{ EVENTS : "administra / supervisa"
   CLIENTS ||--o{ EVENTS : "comitente contratante"
   EVENTS ||--|| TIMINGS : "cronograma 1:1 (eventId)"
+  EVENTS ||--|| ACCREDITATIONS : "acreditaciones 1:1 (eventId)"
   EVENTS ||--|| PROCESS_NODES : "nodos DAG 1:1 (eventId)"
   EVENTS ||--o{ AUDIT_LOGS : "bitacora de eventos"
   EVENTS }o--o{ SUPPLIERS : "contrata rubros tecnicos"
@@ -45,6 +46,11 @@ erDiagram
   TIMINGS {
     string id PK "eventId (evt_*)"
     array items "TimingItem[] (orden, horario, sector, resp)"
+  }
+
+  ACCREDITATIONS {
+    string id PK "eventId (evt_*)"
+    array items "AccreditationItem[] (pases, nivel, ART, QR, check-in)"
   }
 
   PROCESS_NODES {
@@ -154,7 +160,32 @@ Almacena el cronograma de actividades de un evento específico en un único docu
 | `id` | `string` | Sí | Debe coincidir exactamente con el `eventId` padre. |
 | `items` | `list` | Sí | Lista de `TimingItem` ($\le 500$ ítems por documento). |
 
-### 2.4 Colección `/process_nodes/{eventId}`
+### 2.4 Colección `/accreditations/{eventId}`
+Almacena la nómina de acreditaciones y credenciales del personal técnico, proveedores e invitados asignados a la producción en un documento atómico $1:1$.
+
+| Campo | Tipo | Requerido | Descripción / Invariante |
+| :--- | :--- | :---: | :--- |
+| `id` | `string` | Sí | Coincide exactamente con el `eventId` padre. |
+| `items` | `list` | Sí | Lista de `AccreditationItem` ($\le 500$ acreditados por documento). |
+
+#### Estructura interna de `AccreditationItem`:
+- `id` (`string`): Identificador único con prefijo `acc_*`.
+- `eventId` (`string`): Clave foránea al evento asociado.
+- `firstName` (`string`) & `lastName` (`string`): Nombre y apellido del acreditado ($2 \le \text{size} \le 80$).
+- `documentNumber` (`string`): DNI, Pasaporte o identificación oficial ($6 \le \text{size} \le 20$).
+- `role` (`string`): Función técnica en el espectáculo (ej. *Operador de Luces*, *Rigger*, *Runner*).
+- `company` (`string`): Proveedor, empresa técnica o productora a la que pertenece.
+- `accessLevel` (`string`): Categoría exclusiva de acceso: `'ALL ACCESS'`, `'STAFF'` o `'GUEST'`.
+- `status` (`string`): Estado operativo: `'solicitada'`, `'aprobada'`, `'impresa'`, `'en_sitio'` o `'revocada'`.
+- `qrCode` (`string`): Código alfanumérico determinista seguro para escaneo en puerta (`MET-XXXX-XXXX`).
+- `checkInAt` (`string | null`): Marca temporal ISO del ingreso físico al predio.
+- `checkOutAt` (`string | null`): Marca temporal ISO de salida del predio.
+- `checkInBy` (`string | null`): Nombre o ID del operador de portería que validó el acceso.
+- `insuranceVerified` (`boolean`): Bandera de confirmación de seguro de accidentes laborales (ART).
+- `emergencyPhone` (`string | undefined`): Teléfono de urgencias médicas o contacto directo.
+- `notes` (`string | undefined`): Indicaciones especiales de seguridad o retiro de equipamiento.
+
+### 2.5 Colección `/process_nodes/{eventId}`
 Almacena los nodos de proceso DAG vinculados a un evento en un único documento $1:1$.
 
 | Campo | Tipo | Requerido | Descripción / Invariante |
@@ -162,7 +193,7 @@ Almacena los nodos de proceso DAG vinculados a un evento en un único documento 
 | `id` | `string` | Sí | Coincide exactamente con el `eventId`. |
 | `items` | `list` | Sí | Lista de `ProcessNode` ($\le 500$ nodos por documento). |
 
-### 2.5 Colección `/audit_logs/{logId}`
+### 2.6 Colección `/audit_logs/{logId}`
 Registro inmutable de auditoría para trazabilidad de cambios de estado y modificaciones críticas.
 
 | Campo | Tipo | Requerido | Descripción / Invariante |
@@ -175,7 +206,7 @@ Registro inmutable de auditoría para trazabilidad de cambios de estado y modifi
 | `details` | `string` | Sí | Detalle descriptivo de la operación. |
 | `timestamp`| `string` | Sí | Marca horaria formateada en hora local. |
 
-### 2.6 Colección `/clients/{clientId}`, `/suppliers/{supplierId}` y `/crew/{memberId}`
+### 2.7 Colección `/clients/{clientId}`, `/suppliers/{supplierId}` y `/crew/{memberId}`
 Directorios operativos de la productora.
 
 | Colección | Prefijo ID | Campos Obligatorios | Campos Clave Opcionales |
@@ -184,7 +215,7 @@ Directorios operativos de la productora.
 | **`/suppliers`** | `sup_*` | `id`, `name`, `company`, `category`, `email`, `phone`, `createdAt` | `taxId`, `taxCondition`, `emergencyPhone`, `paymentTerms`, `equipmentHighlights` |
 | **`/crew`** | `crew_*` | `id`, `userId`, `userName`, `sector`, `roleInEvent`, `userEmail` | `seniority`, `type`, `documentNumber`, `artInsurance`, `clothingSize`, `dietaryRestrictions` |
 
-### 2.7 Colección `/workflows/{workflowId}`
+### 2.8 Colección `/workflows/{workflowId}`
 Definición de plantillas reutilizables de flujos de trabajo técnicos.
 
 | Campo | Tipo | Requerido | Descripción / Invariante |
@@ -208,6 +239,7 @@ Definición de plantillas reutilizables de flujos de trabajo técnicos.
    const ops: BatchOperation[] = [
      { type: 'delete', ref: doc(collection(db, 'events'), eventId) },
      { type: 'delete', ref: doc(collection(db, 'timings'), eventId) },
+     { type: 'delete', ref: doc(collection(db, 'accreditations'), eventId) },
      { type: 'delete', ref: doc(collection(db, 'process_nodes'), eventId) }
    ];
    await commitBatchInChunks(db, ops);

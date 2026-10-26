@@ -134,23 +134,27 @@ Para asegurar una carga inicial de la aplicación inferior a $1.5\text{ segundos
   En [`vite.config.ts`](file:///C:/Users/juanm/Desktop/Workspace/METODICAH/vite.config.ts):
   - `firebase-vendor`: `@firebase/app`, `@firebase/auth`, `@firebase/firestore`, `@firebase/storage`, `@firebase/analytics`.
   - `flow-vendor`: `@xyflow/react` (descargado única y exclusivamente al ingresar a `/workflow`).
-  - `pdf-vendor`: `jspdf`, `html2canvas` (descargado bajo demanda cuando el usuario pulsa "Exportar PDF").
+  - `pdf-vendor`: `jspdf`, `html2canvas` (descargado bajo demanda cuando el usuario pulsa "Exportar PDF" o planillas de acreditaciones).
+  - `xlsx-vendor`: `xlsx` (descargado bajo demanda cuando el usuario exporta nóminas de acreditación a Excel).
   - `ui`: `lucide-react`, `zustand`, `react-hook-form`, `zod`.
 
 ---
 
 ## 5. Pirámide de Testing y Quality Gates
 
-La confiabilidad del software se valida mediante una batería automatizada con **20 archivos de suite y 171 tests unitarios e integrados** ejecutados sobre **Vitest 5 + jsdom**:
+La confiabilidad del software se valida mediante una batería automatizada con **23 archivos de suite y 187 tests unitarios e integrados** ejecutados sobre **Vitest 5 + jsdom**:
 1. **Pruebas de Dominio y Utilidades Matemáticas:**
    - Algoritmo de validación CUIT/CUIL vía Módulo 11 ([`clientUtils.test.ts`](file:///C:/Users/juanm/Desktop/Workspace/METODICAH/src/utils/clientUtils.ts)).
    - Invariante de fechas al mediodía local UTC-3 ([`dateUtils.test.ts`](file:///C:/Users/juanm/Desktop/Workspace/METODICAH/src/utils/dateUtils.test.ts)).
    - Métricas y dependencias acíclicas en flujos DAG ([`workflowUtils.test.ts`](file:///C:/Users/juanm/Desktop/Workspace/METODICAH/src/utils/workflowUtils.test.ts)).
+   - Métricas de aforo en vivo (Headcount %), cobertura ART y determinismo de hashes QR ([`accreditationUtils.test.ts`](file:///C:/Users/juanm/Desktop/Workspace/METODICAH/src/utils/accreditationUtils.test.ts)).
+   - Esquemas de validación estricta Zod en español ([`accreditationSchema.test.ts`](file:///C:/Users/juanm/Desktop/Workspace/METODICAH/src/schemas/accreditationSchema.test.ts)).
 2. **Pruebas de Repositorios y Sanitización:**
    - Sanitización estricta de campos `undefined` antes de persistir en Cloud Firestore ([`repositories.test.ts`](file:///C:/Users/juanm/Desktop/Workspace/METODICAH/src/services/repositories/repositories.test.ts)).
-   - Fragmentación en lotes $\le 450$ operaciones y borrado atómico en cascada ([`firestoreBatchUtils.test.ts`](file:///C:/Users/juanm/Desktop/Workspace/METODICAH/src/services/repositories/firebase/firestoreBatchUtils.test.ts)).
+   - Fragmentación en lotes $\le 450$ operaciones y borrado atómico en cascada de 4 entidades (`events`, `timings`, `accreditations`, `process_nodes`) ([`firestoreBatchUtils.test.ts`](file:///C:/Users/juanm/Desktop/Workspace/METODICAH/src/services/repositories/firebase/firestoreBatchUtils.test.ts)).
 3. **Pruebas de Stores Zustand (Tier 3 Optimistic & Rollback):**
    - Comprobación de aplicación inmediata en $0\text{ ms}$ y reversión exacta a estado anterior ante excepciones simuladas de backend ([`stores.test.ts`](file:///C:/Users/juanm/Desktop/Workspace/METODICAH/src/stores/stores.test.ts)).
 4. **Pruebas de Integración y Ruteo:**
+   - Componentes y flujos de acreditaciones (Top HUD, filtros por categoría `ALL ACCESS`, `STAFF`, `GUEST`, check-in 1-clic, credencial Lanyard y terminal scanner) ([`accreditations.test.tsx`](file:///C:/Users/juanm/Desktop/Workspace/METODICAH/src/components/event-detail/accreditations/accreditations.test.tsx)).
    - Conmutación libre de oscilaciones entre flujos de trabajo ([`workflow.test.tsx`](file:///C:/Users/juanm/Desktop/Workspace/METODICAH/src/components/workflow/workflow.test.tsx)).
    - Protección de rutas privadas y vistas de contingencia 404 ([`routes.test.tsx`](file:///C:/Users/juanm/Desktop/Workspace/METODICAH/src/routes.test.tsx)).

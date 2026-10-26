@@ -5,7 +5,7 @@
 [![Vite](https://img.shields.io/badge/Vite-8.2-646CFF?style=flat&logo=vite&logoColor=white)](https://vitejs.dev/)
 [![Firebase](https://img.shields.io/badge/Firebase-12.17_SDK-FFCA28?style=flat&logo=firebase&logoColor=black)](https://firebase.google.com/)
 [![Zustand](https://img.shields.io/badge/State-Zustand_Tier_3-764ABC?style=flat)](https://github.com/pmndrs/zustand)
-[![Tests](https://img.shields.io/badge/Tests-171_Passed-10B981?style=flat&logo=vitest&logoColor=white)](https://vitest.dev/)
+[![Tests](https://img.shields.io/badge/Tests-187_Passed-10B981?style=flat&logo=vitest&logoColor=white)](https://vitest.dev/)
 [![Design](https://img.shields.io/badge/HUD_Design-Amber_Dark-F59E0B?style=flat)](https://tailwindcss.com/)
 
 **METODICAH** es una plataforma SaaS de ingeniería y gestión integral diseñada bajo el sistema visual **HUD Studio Amber Dark** (`#080b11`) para productoras de espectáculos masivos, festivales, producciones corporativas BTL y despliegues técnicos en vivo. Centraliza el ciclo de vida completo de cada espectáculo: directorio maestro de producciones, cronogramas operativos al minuto (*Run of Show / Timings*), diagramas de camino crítico y dependencias técnicas (*Workflows DAG*), directorio de proveedores homologados, cuadrillas de personal técnico (*Crew*) y matriz de permisos por roles (RBAC).
@@ -38,7 +38,16 @@
    - Gestión unificada de equipo técnico categorizado por sectores (Audio, Iluminación, Video, Escenario, Rigging, etc.) y modalidad (*Staff Interno* o *Freelance*).
    - Matriz declarativa de permisos por rol (`admin`, `team_member`, `guest`) con protección de acceso a nivel de interfaz y reglas de seguridad en backend.
 
-6. **Persistencia Directa & Offline-First (Cloud Firestore):**
+6. **Acreditaciones de Producción & Trazabilidad (`/events/:eventId/accreditations`):**
+   - Registro y control de credenciales bajo 3 categorías exclusivas: `ALL ACCESS` (Ámbar), `STAFF` (Esmeralda) y `GUEST` (Cielo).
+   - Panel analítico Top HUD de control de aforos y Headcount en tiempo real (% y presentes físicos en predio).
+   - Control de seguridad y cobertura de seguros laborales (ART) con advertencias visuales de personal sin póliza.
+   - Check-in en 1 clic y terminal de control de accesos para portería con escáner de códigos QR y búsqueda rápida por DNI.
+   - Pases visuales estilo Lanyard con código QR vectorial en SVG puro listos para imprimir.
+   - Exportación dual de alta fidelidad: Planilla tabular de control en PDF (`jspdf`) y nómina estructurada en Excel (`.xlsx` vía `xlsx-vendor` cargado dinámicamente).
+   - Importador masivo de nóminas CSV/Excel con detección automática de duplicados.
+
+7. **Persistencia Directa & Offline-First (Cloud Firestore):**
    - Conexión directa a Google Cloud Firestore con soporte multi-pestaña e IndexedDB local (`persistentLocalCache` + `persistentMultipleTabManager`).
    - Inicialización limpia (*Clean Slate*): los repositorios y stores operan sin datos de prueba ficticios, reflejando fielmente la información en la nube.
    - Telemetría privada y *fail-silent* mediante Firebase Analytics (regla estricta Anti-PII).
@@ -57,8 +66,8 @@
 | **Telemetría** | Firebase Analytics (`isSupported`) | Monitoreo privado *fail-silent* sin exposición de datos de identificación personal (PII). |
 | **Grafos Interactivos** | `@xyflow/react` 12 | Visualización y manipulación de nodos de proceso DAG (cargado bajo demanda). |
 | **Formularios & Zod** | React Hook Form 7 + Zod 4 | Validación estricta en la frontera de entrada con esquemas fuertemente tipados. |
-| **Documentación PDF** | `jspdf` + `html2canvas` | Generación de reportes de *Run of Show* en cliente con carga dinámica. |
-| **Testing & Calidad** | Vitest 5 + Testing Library + Oxlint | 20 suites automatizadas (171 pruebas unitarias y de integración) y linter ultra-rápido. |
+| **Documentos & Reportes** | `jspdf` + `html2canvas` + `xlsx` | Generación de PDF y hojas de cálculo Excel (.xlsx) con particionado dinámico en chunks. |
+| **Testing & Calidad** | Vitest 5 + Testing Library + Oxlint | 23 suites automatizadas (187 pruebas unitarias y de integración) y linter ultra-rápido. |
 
 ---
 
@@ -70,7 +79,8 @@ METODICAH/
 ├── docs/                    # Suite documental de ingeniería Docs-as-Code
 │   ├── adr/                 # Architecture Decision Records inmutables
 │   │   ├── ADR-001-*.md    # Unificación de repositorios en Firestore + Optimistic UI
-│   │   └── ADR-002-*.md    # Inicialización limpia (Clean Slate) sin datos mock
+│   │   ├── ADR-002-*.md    # Inicialización limpia (Clean Slate) sin datos mock
+│   │   └── ADR-003-*.md    # Módulo de acreditaciones, trazabilidad y exportaciones
 │   ├── architecture/        # Capas de software, flujo reactivo y bundling
 │   ├── database/            # Modelo de datos NoSQL, Mermaid ER y reglas de seguridad
 │   ├── domain/              # Reglas de negocio, fórmulas LaTeX y máquinas de estado
@@ -84,7 +94,8 @@ METODICAH/
 │   │   ├── common/          # ErrorBoundary, BaseModal, ConfirmModal, EmptyState
 │   │   ├── crew/            # Fichas de staff técnico y asignaciones
 │   │   ├── dashboard/       # Tarjetas KPI, buscador rápido y bienvenida
-│   │   ├── event-detail/    # Pestañas de detalle, timing, auditoría y exportación
+│   │   ├── event-detail/    # Pestañas de detalle, timing, auditoría y acreditaciones
+│   │   │   └── accreditations/ # Tabla, Top HUD, pase QR, scanner y modales
 │   │   ├── events/          # Formularios modulares, filtros y tarjetas de eventos
 │   │   ├── right-sidebar/   # Panel analítico lateral en vivo
 │   │   ├── settings/        # Configuración de etapas, sectores y matriz de roles

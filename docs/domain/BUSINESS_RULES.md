@@ -14,6 +14,10 @@ Para garantizar una correspondencia unívoca entre las operaciones técnicas de 
 | **Personal Técnico (Crew)** | Staff interno o técnico independiente asignado a sectores especializados. | [`EventCrewMember`](file:///C:/Users/juanm/Desktop/Workspace/METODICAH/src/types/metodicah.ts) |
 | **Proveedor Homologado** | Empresa contratista externa de servicios de equipamiento (Audio, Luces, Estructuras). | [`Supplier`](file:///C:/Users/juanm/Desktop/Workspace/METODICAH/src/types/metodicah.ts) |
 | **Comitente / Cliente** | Persona física o jurídica contratante del servicio de producción integral. | [`Client`](file:///C:/Users/juanm/Desktop/Workspace/METODICAH/src/types/metodicah.ts) |
+| **Acreditación de Producción** | Pase nominal emitido para control de acceso de personal técnico, proveedores o invitados. | [`AccreditationItem`](file:///C:/Users/juanm/Desktop/Workspace/METODICAH/src/types/metodicah.ts) |
+| **Nivel de Acceso (3 Categorías)** | Categoría espacial permitida: `ALL ACCESS` (Acceso Total), `STAFF` (Técnica) o `GUEST` (Invitados). | [`AccreditationAccessLevel`](file:///C:/Users/juanm/Desktop/Workspace/METODICAH/src/types/metodicah.ts) |
+| **Presencia en Sitio (Check-In)** | Estado que valida el ingreso físico al predio con estampa temporal (`checkInAt`) y operador. | `status === 'en_sitio'` |
+| **Seguro Laboral (ART)** | Constancia obligatoria de póliza de accidentes de trabajo con cláusula de no repetición. | `insuranceVerified: boolean` |
 | **Bitácora de Auditoría** | Registro histórico inmutable de eventos de sistema y cambios de estado operativo. | [`AuditLog`](file:///C:/Users/juanm/Desktop/Workspace/METODICAH/src/types/metodicah.ts) |
 | **Matriz de Permisos (RBAC)**| Permisos granulares de lectura, creación, edición y borrado por rol global. | [`RolePermissionConfig`](file:///C:/Users/juanm/Desktop/Workspace/METODICAH/src/types/metodicah.ts) |
 
@@ -55,6 +59,26 @@ stateDiagram-v2
   completed --> [*]
 ```
 
+### 2.3 Ciclo de Vida de una Acreditación (AccreditationStatus)
+
+Las credenciales técnicas emitidas para la producción transitan por una máquina de estados estricta orientada a la seguridad perimetral y trazabilidad de ingresos:
+
+```mermaid
+stateDiagram-v2
+  [*] --> solicitada: Carga Nominal / Importación CSV
+  solicitada --> aprobada: Validación de Producción
+  solicitada --> revocada: Solicitud Rechazada
+  aprobada --> impresa: Emisión de Credencial Lanyard
+  aprobada --> en_sitio: Check-In en Puerta (Validación Manual / DNI)
+  impresa --> en_sitio: Check-In en Puerta (Escaneo QR)
+  en_sitio --> aprobada: Check-Out / Egreso del Predio
+  en_sitio --> revocada: Desafectación en Campo
+  aprobada --> revocada: Baja por Infracción de Seguridad
+  revocada --> [*]
+```
+
+- **Trazabilidad en Tiempo Real:** El paso a `en_sitio` estampa la hora exacta (`checkInAt`) y el operador que autorizó el paso (`checkInBy`), generando un registro inmediato en la bitácora de auditoría (`AuditLog`).
+
 ---
 
 ## 3. Formulación Matemática Rigurosa e Invariantes
@@ -76,7 +100,20 @@ $$P_{\text{avance}} = \begin{cases} 0.00\% & \text{si } |N| \le 0 \text{ o } \te
 > [!IMPORTANT]
 > **Defensa Contra División por Cero:** Toda división en el dominio verifica previamente `if (!nodes || nodes.length <= 0) return 0;`. El resultado se redondea a un número entero mediante `Math.round()`, garantizando que jamás se propaguen valores `NaN` o `Infinity` al DOM.
 
-### 3.3 Validación Algorítmica de CUIT / CUIL (Módulo 11 Argentino)
+### 3.3 Métricas de Aforo, Presencia en Vivo (Headcount) y Cobertura ART
+
+En [`src/utils/accreditationUtils.ts`](file:///C:/Users/juanm/Desktop/Workspace/METODICAH/src/utils/accreditationUtils.ts), dado el conjunto de acreditaciones $A = \{a_1, a_2, \dots, a_m\}$ de un evento:
+
+1. **Porcentaje de Headcount / Presencia en Sitio ($P_{\text{headcount}}$):**
+   $$P_{\text{headcount}} = \begin{cases} 0.00\% & \text{si } |A| \le 0 \text{ o } \text{isNaN}(|A|) \\ \text{round}\left( \frac{\sum_{i=1}^{m} \mathbb{I}(\text{status}(a_i) = \text{en\_sitio})}{|A|} \times 100, 1 \right) & \text{si } |A| > 0 \end{cases}$$
+
+2. **Porcentaje de Cobertura de ART / Seguro Laboral ($P_{\text{art}}$):**
+   $$P_{\text{art}} = \begin{cases} 0.00\% & \text{si } |A| \le 0 \text{ o } \text{isNaN}(|A|) \\ \text{round}\left( \frac{\sum_{i=1}^{m} \mathbb{I}(\text{insuranceVerified}(a_i) = \text{true})}{|A|} \times 100, 1 \right) & \text{si } |A| > 0 \end{cases}$$
+
+> [!IMPORTANT]
+> **Invariante de Aforo Cero e Inmunidad IEEE 754:** La función `calculateAccreditationStats` valida explícitamente `if (total <= 0 || Number.isNaN(total))` retornando contadores en cero y $0.00\%$ antes de operar. Los porcentajes de presencia se formatean con un decimal exacto mediante `Number(value.toFixed(1))`.
+
+### 3.4 Validación Algorítmica de CUIT / CUIL (Módulo 11 Argentino)
 
 En [`src/utils/clientUtils.ts`](file:///C:/Users/juanm/Desktop/Workspace/METODICAH/src/utils/clientUtils.ts), todo CUIT/CUIL de 11 dígitos $D = (d_1, d_2, \dots, d_{11})$ se valida matemáticamente:
 
